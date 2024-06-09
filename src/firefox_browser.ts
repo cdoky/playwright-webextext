@@ -1,16 +1,31 @@
-import type {
-  Browser,
-  BrowserContext,
-  BrowserType,
-  BrowserServer,
-  LaunchOptions,
-} from "playwright-core";
-import { FirefoxOverrides } from "./firefox_overrides";
-import { FirefoxAddonInstaller } from "./firefox_addon_installer";
-import { FirefoxExtensionPreferenceRepository } from "./firefox_extension_preferences";
-import { findFreeTcpPort } from "./firefox_remote";
+import { FirefoxRDPAddonActor } from "firefox_types";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import type {
+    Browser,
+    BrowserContext,
+    BrowserType,
+    LaunchOptions,
+    BrowserServer
+} from "playwright-core";
+import { FirefoxAddonInstaller } from "./firefox_addon_installer";
+import { FirefoxExtensionPreferenceRepository } from "./firefox_extension_preferences";
+import { FirefoxOverrides } from "./firefox_overrides";
+import { findFreeTcpPort } from "./firefox_remote";
+
+declare module "playwright-core" {
+    interface Browser {
+        addons?: FirefoxRDPAddonActor[]
+    }
+
+    interface BrowserContext {
+        addons?: FirefoxRDPAddonActor[]
+    }
+
+    interface BrowserServer {
+        addons?: FirefoxRDPAddonActor[]
+    }
+}
 
 type LaunchServerOptions = Parameters<BrowserType["launchServer"]>[0];
 type LaunchPersistentContextOptions = Parameters<
@@ -60,7 +75,8 @@ export class FirefoxWithExtension implements BrowserType {
       args,
       firefoxUserPrefs,
     });
-    await this.installAddons(port);
+    let addons = await this.installAddons(port);
+    browser.addons = addons;
     return browser;
   }
 
@@ -83,7 +99,9 @@ export class FirefoxWithExtension implements BrowserType {
         firefoxUserPrefs,
       },
     );
-    await this.installAddons(port);
+    
+    let addons = await this.installAddons(port);
+    browser.addons = addons;
     return browser;
   }
 
@@ -98,15 +116,16 @@ export class FirefoxWithExtension implements BrowserType {
       args,
       firefoxUserPrefs,
     });
-    await this.installAddons(port);
+    let addons = await this.installAddons(port);
+    browserServer.addons = addons;
     return browserServer;
   }
 
-  async installAddons(debuggingServerPort: number): Promise<void> {
+  async installAddons(debuggingServerPort: number): Promise<FirefoxRDPAddonActor[]> {
     const installer = new FirefoxAddonInstaller(debuggingServerPort);
-    await Promise.all(
+    return await Promise.all(
       this.addonPaths.map(async (path) => {
-        await installer.install(path);
+        return await installer.install(path);
       }),
     );
   }
